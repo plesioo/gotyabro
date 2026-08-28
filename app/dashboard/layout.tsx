@@ -21,7 +21,7 @@ export default async function DashboardLayout({
       <aside className="flex w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-5 py-4">
           <Link href="/dashboard" className="block">
-            <span className="text-lg font-bold tracking-tight">GotYaBro</span>
+            <span className="text-lg font-bold tracking-tight">GotYaBro Platform</span>
           </Link>
           <p className="mt-0.5 truncate text-xs text-gray-500">
             {ctx.communityName}
