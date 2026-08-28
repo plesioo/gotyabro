@@ -1,14 +1,8 @@
 import Link from "next/link";
 import { requireCommunity } from "@/lib/auth";
-import { logout } from "@/lib/actions";
+import { AccountMenu } from "@/components/AccountMenu";
 import { NavLink } from "@/components/NavLink";
-import {
-  MembersIcon,
-  OverviewIcon,
-  RolesIcon,
-  SettingsIcon,
-  SignOutIcon,
-} from "@/components/icons";
+import { MembersIcon, OverviewIcon, RolesIcon } from "@/components/icons";
 
 const ICON_CLASS = "h-4.5 w-4.5 shrink-0";
 
@@ -29,12 +23,6 @@ const NAV_ITEMS = [
     icon: <RolesIcon className={ICON_CLASS} />,
   },
 ];
-
-const SETTINGS_ITEM = {
-  href: "/dashboard/settings",
-  label: "Settings",
-  icon: <SettingsIcon className={ICON_CLASS} />,
-};
 
 export default async function DashboardLayout({
   children,
@@ -63,25 +51,7 @@ export default async function DashboardLayout({
             />
           ))}
         </nav>
-        <div className="border-t border-gray-100 p-3">
-          <p className="truncate px-2 pb-2 text-xs text-gray-400">{ctx.gymName}</p>
-          <div className="mb-1">
-            <NavLink
-              href={SETTINGS_ITEM.href}
-              label={SETTINGS_ITEM.label}
-              icon={SETTINGS_ITEM.icon}
-            />
-          </div>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-100"
-            >
-              <SignOutIcon className="h-4.5 w-4.5 shrink-0" />
-              Sign out
-            </button>
-          </form>
-        </div>
+        <AccountMenu name="Phillip Fleischer" role="Owner" />
       </aside>
       <main className="flex-1 overflow-x-auto p-8">{children}</main>
     </div>
