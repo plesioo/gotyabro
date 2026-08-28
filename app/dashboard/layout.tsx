@@ -2,13 +2,39 @@ import Link from "next/link";
 import { requireCommunity } from "@/lib/auth";
 import { logout } from "@/lib/actions";
 import { NavLink } from "@/components/NavLink";
+import {
+  MembersIcon,
+  OverviewIcon,
+  RolesIcon,
+  SettingsIcon,
+  SignOutIcon,
+} from "@/components/icons";
+
+const ICON_CLASS = "h-4.5 w-4.5 shrink-0";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Overview" },
-  { href: "/dashboard/members", label: "Members" },
-  { href: "/dashboard/roles", label: "Roles" },
-  { href: "/dashboard/settings", label: "Settings" },
+  {
+    href: "/dashboard",
+    label: "Overview",
+    icon: <OverviewIcon className={ICON_CLASS} />,
+  },
+  {
+    href: "/dashboard/members",
+    label: "Members",
+    icon: <MembersIcon className={ICON_CLASS} />,
+  },
+  {
+    href: "/dashboard/roles",
+    label: "Roles",
+    icon: <RolesIcon className={ICON_CLASS} />,
+  },
 ];
+
+const SETTINGS_ITEM = {
+  href: "/dashboard/settings",
+  label: "Settings",
+  icon: <SettingsIcon className={ICON_CLASS} />,
+};
 
 export default async function DashboardLayout({
   children,
@@ -29,16 +55,29 @@ export default async function DashboardLayout({
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.href} href={item.href} label={item.label} />
+            <NavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+            />
           ))}
         </nav>
         <div className="border-t border-gray-100 p-3">
           <p className="truncate px-2 pb-2 text-xs text-gray-400">{ctx.gymName}</p>
+          <div className="mb-1">
+            <NavLink
+              href={SETTINGS_ITEM.href}
+              label={SETTINGS_ITEM.label}
+              icon={SETTINGS_ITEM.icon}
+            />
+          </div>
           <form action={logout}>
             <button
               type="submit"
-              className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-100"
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-100"
             >
+              <SignOutIcon className="h-4.5 w-4.5 shrink-0" />
               Sign out
             </button>
           </form>
