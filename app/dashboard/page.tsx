@@ -34,7 +34,7 @@ export default async function OverviewPage() {
 
       <div className="mt-8">
         <h2 className="text-sm font-semibold text-gray-900">Recent activity</h2>
-        <div className="mt-3 rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="mt-3 max-h-[28rem] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <ActivityFeed activity={activity} />
         </div>
       </div>
