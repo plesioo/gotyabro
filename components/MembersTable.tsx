@@ -123,6 +123,7 @@ export function MembersTable({
       {(modal?.type === "add" || modal?.type === "edit") && (
         <MemberFormModal
           member={modal.type === "edit" ? modal.member : null}
+          roles={roles}
           onClose={close}
         />
       )}
@@ -138,17 +139,31 @@ export function MembersTable({
 
 function MemberFormModal({
   member,
+  roles,
   onClose,
 }: {
   member: MemberWithRoles | null;
+  roles: Role[];
   onClose: () => void;
 }) {
   const action = member ? updateMember.bind(null, member.id) : createMember;
   const [state, formAction, pending] = useActionState(action, null);
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
+    () => new Set(member?.roles.map((role) => role.id))
+  );
 
   useEffect(() => {
     if (state?.ok) onClose();
   }, [state, onClose]);
+
+  const toggleRole = (roleId: string) => {
+    setSelectedRoles((prev) => {
+      const next = new Set(prev);
+      if (next.has(roleId)) next.delete(roleId);
+      else next.add(roleId);
+      return next;
+    });
+  };
 
   return (
     <Modal title={member ? "Edit member" : "Add member"} onClose={onClose}>
@@ -201,6 +216,39 @@ function MemberFormModal({
             defaultValue={member?.phone ?? ""}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-900"
           />
+        </div>
+        <div>
+          <span className="mb-1 block text-sm font-medium">
+            Roles <span className="font-normal text-gray-400">(optional)</span>
+          </span>
+          {roles.length === 0 ? (
+            <p className="text-xs text-gray-400">
+              No roles yet — create one on the Roles page to assign it here.
+            </p>
+          ) : (
+            <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-lg border border-gray-200 p-1">
+              {roles.map((role) => (
+                <label
+                  key={role.id}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    name="roleIds"
+                    value={role.id}
+                    checked={selectedRoles.has(role.id)}
+                    onChange={() => toggleRole(role.id)}
+                    className="h-4 w-4 accent-gray-900"
+                  />
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass(role.color)}`}
+                  >
+                    {role.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         {state?.error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

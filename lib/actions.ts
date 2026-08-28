@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { PoolClient } from "pg";
 import { z } from "zod";
 import { logActivity } from "./activity";
 import { requireCommunity, requireGym } from "./auth";
@@ -10,6 +11,66 @@ import { pool, withTransaction } from "./db";
 import { createSession, destroySession } from "./session";
 import type { ActionState } from "./types";
 import { ROLE_COLORS } from "./types";
+
+/**
+ * Replaces a member's role set with `desiredRoleIds`, diffing against what's
+ * currently assigned so only the actual changes get written and logged.
+ * Shared by member creation, member editing, and the standalone role-assign
+ * popover so all three stay consistent.
+ */
+async function applyRoleAssignments(
+  tx: PoolClient,
+  communityId: string,
+  memberId: string,
+  memberName: string,
+  desiredRoleIds: string[]
+): Promise<void> {
+  // Only roles belonging to this community are assignable.
+  const validRoles = await tx.query(
+    `select id, name from roles where community_id = $1`,
+    [communityId]
+  );
+  const roleNameById = new Map<string, string>(
+    validRoles.rows.map((row) => [row.id, row.name])
+  );
+  const wanted = new Set(desiredRoleIds.filter((id) => roleNameById.has(id)));
+
+  const current = await tx.query(
+    `select role_id from member_roles where member_id = $1`,
+    [memberId]
+  );
+  const existing = new Set<string>(current.rows.map((row) => row.role_id));
+
+  const toAdd = [...wanted].filter((id) => !existing.has(id));
+  const toRemove = [...existing].filter((id) => !wanted.has(id));
+
+  for (const roleId of toAdd) {
+    await tx.query(
+      `insert into member_roles (member_id, role_id) values ($1, $2)`,
+      [memberId, roleId]
+    );
+    await logActivity(
+      tx,
+      communityId,
+      "ROLE_ASSIGNED",
+      `Assigned role ${roleNameById.get(roleId)} to ${memberName}`,
+      { memberId, roleId }
+    );
+  }
+  for (const roleId of toRemove) {
+    await tx.query(
+      `delete from member_roles where member_id = $1 and role_id = $2`,
+      [memberId, roleId]
+    );
+    await logActivity(
+      tx,
+      communityId,
+      "ROLE_UNASSIGNED",
+      `Unassigned role ${roleNameById.get(roleId)} from ${memberName}`,
+      { memberId, roleId }
+    );
+  }
+}
 
 // ---------- auth ----------
 
@@ -129,6 +190,7 @@ export async function createMember(
   const parsed = memberSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const { firstName, lastName, email, phone } = parsed.data;
+  const roleIds = formData.getAll("roleIds").map(String);
 
   await withTransaction(async (tx) => {
     const { rows } = await tx.query(
@@ -136,16 +198,27 @@ export async function createMember(
        values ($1, $2, $3, $4, $5) returning id`,
       [ctx.communityId, firstName, lastName, email, phone]
     );
+    const memberId = rows[0].id;
     await logActivity(
       tx,
       ctx.communityId,
       "MEMBER_ADDED",
       `Added member ${firstName} ${lastName}`,
-      { memberId: rows[0].id }
+      { memberId }
     );
+    if (roleIds.length > 0) {
+      await applyRoleAssignments(
+        tx,
+        ctx.communityId,
+        memberId,
+        `${firstName} ${lastName}`,
+        roleIds
+      );
+    }
   });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard/roles");
   return { ok: true };
 }
 
@@ -158,6 +231,7 @@ export async function updateMember(
   const parsed = memberSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const { firstName, lastName, email, phone } = parsed.data;
+  const roleIds = formData.getAll("roleIds").map(String);
 
   await withTransaction(async (tx) => {
     const { rowCount } = await tx.query(
@@ -174,9 +248,17 @@ export async function updateMember(
       `Updated member ${firstName} ${lastName}`,
       { memberId }
     );
+    await applyRoleAssignments(
+      tx,
+      ctx.communityId,
+      memberId,
+      `${firstName} ${lastName}`,
+      roleIds
+    );
   });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard/roles");
   return { ok: true };
 }
 
@@ -201,6 +283,7 @@ export async function removeMember(memberId: string): Promise<void> {
   });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard/roles");
 }
 
 export async function setMemberRoles(
@@ -216,55 +299,11 @@ export async function setMemberRoles(
     );
     if (memberResult.rows.length === 0) throw new Error("Member not found");
     const memberName = `${memberResult.rows[0].first_name} ${memberResult.rows[0].last_name}`;
-
-    // Only roles belonging to this community are assignable.
-    const validRoles = await tx.query(
-      `select id, name from roles where community_id = $1`,
-      [ctx.communityId]
-    );
-    const roleNameById = new Map<string, string>(
-      validRoles.rows.map((row) => [row.id, row.name])
-    );
-    const wanted = new Set(roleIds.filter((id) => roleNameById.has(id)));
-
-    const current = await tx.query(
-      `select role_id from member_roles where member_id = $1`,
-      [memberId]
-    );
-    const existing = new Set<string>(current.rows.map((row) => row.role_id));
-
-    const toAdd = [...wanted].filter((id) => !existing.has(id));
-    const toRemove = [...existing].filter((id) => !wanted.has(id));
-
-    for (const roleId of toAdd) {
-      await tx.query(
-        `insert into member_roles (member_id, role_id) values ($1, $2)`,
-        [memberId, roleId]
-      );
-      await logActivity(
-        tx,
-        ctx.communityId,
-        "ROLE_ASSIGNED",
-        `Assigned role ${roleNameById.get(roleId)} to ${memberName}`,
-        { memberId, roleId }
-      );
-    }
-    for (const roleId of toRemove) {
-      await tx.query(
-        `delete from member_roles where member_id = $1 and role_id = $2`,
-        [memberId, roleId]
-      );
-      await logActivity(
-        tx,
-        ctx.communityId,
-        "ROLE_UNASSIGNED",
-        `Unassigned role ${roleNameById.get(roleId)} from ${memberName}`,
-        { memberId, roleId }
-      );
-    }
+    await applyRoleAssignments(tx, ctx.communityId, memberId, memberName, roleIds);
   });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard/roles");
 }
 
 // ---------- roles ----------
